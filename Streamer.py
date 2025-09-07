@@ -6,6 +6,7 @@ import os
 import sounddevice as sd
 import soundfile as sf
 import wave
+import numpy as np
 
 
 app = Flask(__name__)
@@ -30,39 +31,53 @@ class Camera:
         self.save_folder    += ["front"] + ["rear"] 
         self.video          = []
         self.video          += [cv2.VideoWriter("video_front", self.fourcc, self.fps[i], (int(self.WIDTH[i]),int(self.HEIGHT[i]))) for i in range(len(self.cap))]
-        self.samplerate     = 48000 
-        self.duration       = 5 
-        self.device_id      = 4 
-        self.channels       = 1 
-        self.recording_flag = True 
-        self.audio_frames   = []
-        self.AUDIO_FILE     = "output.wav" 
+
+        self.audio_device_id    = 12 
+        self.audio_info         = sd.query_devices(self.audio_device_id)
+        self.samplerate         = int(self.audio_info["default_samplerate"]) 
+        self.channels           = self.audio_info["max_input_channels"] 
+        self.recording_flag     = True 
+        self.audio_frames       = []
+        self.AUDIO_FILE         = "output.wav" 
+
+        self.record_time        = 15
 
         threading.Thread(target=self._update, daemon=True).start()
         threading.Thread(target=self.record_audio, daemon=True).start()
 
-        print(sd.query_devices(self.device_id))
+        print(sd.query_devices(self.audio_device_id))
 
     def record_audio(self):
         """マイク録音スレッド"""
         def callback(indata, frames, time_, status):
             self.audio_frames.append(indata.copy())
 
-        with sd.InputStream(device=self.device_id, samplerate=self.samplerate, channels=self.channels, callback=self.callback):
-            if self.duration:
-                sd.sleep(int(self.duration * 1000))
-            else:
-                while self.recording_flag:
-                    sd.sleep(100)
+        with sd.InputStream(device=self.audio_device_id, samplerate=self.samplerate, channels=self.channels, callback=callback):
+            while True:
 
-    def save_audio():
-        """録音データをwavに保存"""
-        wf = wave.open(self.AUDIO_FILE, 'wb')
-        wf.setnchannels(self.channels)
-        wf.setsampwidth(2)  # 16bit
-        wf.setframerate(self.samplerate)
-        wf.writeframes(b''.join([f.tobytes() for f in self.audio_frames]))
-        wf.close()
+                if(self.boFirst ):
+                    wait = self.record_time - (self.now.second % self.record_time)
+                    sd.sleep(int(wait * 1000))
+                else:
+                    sd.sleep(int(self.record_time * 1000))
+
+                audio_data = np.concatenate(self.audio_frames, axis=0)
+
+                # WAV に保存
+                dateday_str = self.now.strftime("%Y-%m-%d")
+                save_dir_pos = "recorded/" +"audio" + "/" 
+                save_dir_date = save_dir_pos + dateday_str + "/"
+                if os.path.isdir(save_dir_date):
+                    pass
+                elif os.path.isdir(save_dir_pos):
+                    os.makedirs(save_dir_date)
+                else:
+                    os.makedirs(save_dir_pos)
+                    os.makedirs(save_dir_date)
+                datetime_str = self.now.strftime("%Y-%m-%d %H:%M:%S")
+                save_path = save_dir_date + datetime_str + ".wav"
+                sf.write(save_path, audio_data, self.samplerate)
+                self.audio_frames       = []
 
     def _timeCtrl(self):
         self.now = datetime.datetime.now()
@@ -87,7 +102,7 @@ class Camera:
         if(self.boFirst ):
             self.video[camera_num]  = cv2.VideoWriter(save_path, self.fourcc, self.fps[camera_num]/len(self.cap), (int(self.WIDTH[camera_num]),int(self.HEIGHT[camera_num])))
             self.boFirst  = False
-        elif (self.now.second%15 == 0):
+        elif (self.now.second%self.record_time == 0):
             self.video[camera_num] .release()
             self.video[camera_num]  = cv2.VideoWriter(save_path, self.fourcc, self.fps[camera_num]/len(self.cap), (int(self.WIDTH[camera_num]),int(self.HEIGHT[camera_num])))
         self.video [camera_num].write(f)
@@ -149,4 +164,4 @@ def stream_rear():
                     mimetype='multipart/x-mixed-replace; boundary=frame_rear') 
 
 if __name__ == "__main__":
-	app.run(host='0.0.0.0', port=5000,threaded=True)
+    app.run(host='0.0.0.0', port=5000,threaded=True)
