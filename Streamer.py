@@ -43,6 +43,7 @@ class Camera:
         self.record_time        = 15
 
         threading.Thread(target=self._update, daemon=True).start()
+        threading.Thread(target=self._update_rear, daemon=True).start()
         threading.Thread(target=self.record_audio, daemon=True).start()
 
         print(sd.query_devices(self.audio_device_id))
@@ -110,20 +111,22 @@ class Camera:
 
     def _update(self):
         while True:
-            ret = []
-            f   = []
-            for c in self.cap:
-                ret += [c.read()[0]]
+            ret = self.cap[0].read()[0] 
+            f   = self.cap[0].read()[1] 
 
-                f += [c.read()[1]]
+            if ret:
+                self._timeCtrl()
+                self.frame_front = self._videoCtrl(f, 0, self.save_folder[0])
 
-            for i in range(len(ret)):
-                if ret[i]:
-                    self._timeCtrl()
-                    f[i] = self._videoCtrl(f[i], i, self.save_folder[i])
-                    self.frame[i] = f[i]
-            self.frame_front = self.frame[0] 
-            self.frame_rear = self.frame[1] 
+
+    def _update_rear(self):
+        while True:
+            ret = self.cap[1].read()[0] 
+            f   = self.cap[1].read()[1] 
+
+            if ret:
+                self._timeCtrl()
+                self.frame_rear = self._videoCtrl(f, 1, self.save_folder[1])
 
     def get_frame(self):
         if self.frame_front is None: return None
