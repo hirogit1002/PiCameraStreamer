@@ -9,6 +9,7 @@ import shutil
 import io
 import zipfile
 import re
+import tempfile
 
 from pathlib import Path
 from flask import (
@@ -871,68 +872,100 @@ class Camera:
 
 
     # =====================================================
-    # ZIP一括ダウンロード
+    # ZIP一括ダウンロード（一時ファイル方式）
     # =====================================================
 
     def create_daily_zip(self, selected_date):
 
-        if not re.fullmatch(
-            r"\d{4}-\d{2}-\d{2}",
-            selected_date
-        ):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", selected_date):
             return None
 
         date_prefix = selected_date.replace("-", "") + "_"
 
-        memory_file = io.BytesIO()
+        zip_path = None
 
-        file_count = 0
+        try:
 
-        with zipfile.ZipFile(
-            memory_file,
-            "w",
-            compression=zipfile.ZIP_DEFLATED
-        ) as zip_file:
+            temp = tempfile.NamedTemporaryFile(
+                suffix=".zip",
+                dir=str(BASE_FOLDER.resolve()),
+                delete=False
+            )
 
-            for category, folder in [
-                ("front", FRONT_FOLDER),
-                ("audio", AUDIO_FOLDER)
-            ]:
+            zip_path = Path(temp.name)
+            temp.close()
 
-                extension = ".mp4" if category == "front" else ".wav"
+            file_count = 0
 
-                files = sorted(folder.glob(f"*{extension}"))
+            with zipfile.ZipFile(
+                zip_path,
+                "w",
+                compression=zipfile.ZIP_DEFLATED
+            ) as zip_file:
 
-                for file in files:
+                for category, folder in [
+                    ("front", FRONT_FOLDER),
+                    ("audio", AUDIO_FOLDER)
+                ]:
 
-                    if not file.name.startswith(date_prefix):
-                        continue
+                    extension = (
+                        ".mp4" if category == "front"
+                        else ".wav"
+                    )
 
-                    if self.is_active_file(file.name):
-                        continue
+                    for file in sorted(
+                        folder.glob(f"*{extension}")
+                    ):
 
-                    try:
-
-                        if not file.is_file():
+                        if not file.name.startswith(date_prefix):
                             continue
 
-                        zip_file.write(
-                            file,
-                            arcname=f"{category}/{file.name}"
-                        )
+                        if self.is_active_file(file.name):
+                            continue
 
-                        file_count += 1
+                        try:
 
-                    except Exception as e:
+                            if not file.is_file():
+                                continue
 
-                        print("ZIP file error:", e)
+                            zip_file.write(
+                                file,
+                                arcname=f"{category}/{file.name}"
+                            )
 
-        if file_count == 0:
+                            file_count += 1
+
+                        except Exception as e:
+
+                            print(
+                                "ZIP file error:",
+                                file.name,
+                                e
+                            )
+
+            if file_count == 0:
+
+                zip_path.unlink(missing_ok=True)
+
+                print("No files found for ZIP.")
+
+                return None
+
+            print(
+                f"ZIP created: {zip_path}, "
+                f"{file_count} files"
+            )
+
+            return zip_path
+
+        except Exception as e:
+
+            print("ZIP creation error:", repr(e))
+
+            if zip_path is not None:
+                zip_path.unlink(missing_ok=True)
+
             return None
-
-        memory_file.seek(0)
-
-        return memory_file
 
 
     # =====================================================
@@ -1621,32 +1654,43 @@ def download_zip(selected_date):
 
     try:
 
-        datetime.date.fromisoformat(
-            selected_date
-        )
+        datetime.date.fromisoformat(selected_date)
 
     except ValueError:
 
         abort(400)
 
-    memory_file = camera.create_daily_zip(
+    zip_path = camera.create_daily_zip(
         selected_date
     )
 
-    if memory_file is None:
+    if zip_path is None:
 
-        return "No completed recording files found.", 404
+        return "ZIP対象ファイルがありません。", 404
 
-    filename = (
-        f"recording_{selected_date}.zip"
-    )
+    try:
 
-    return send_file(
-        memory_file,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=filename
-    )
+        response = send_file(
+            str(zip_path),
+            mimetype="application/zip",
+            as_attachment=True,
+            download_name=f"recording_{selected_date}.zip"
+        )
+
+        # ダウンロード完了後に一時ZIPを削除
+        response.call_on_close(
+            lambda: zip_path.unlink(missing_ok=True)
+        )
+
+        return response
+
+    except Exception as e:
+
+        print("ZIP download error:", repr(e))
+
+        zip_path.unlink(missing_ok=True)
+
+        raise
 
 
 # =========================================================
