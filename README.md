@@ -1,67 +1,107 @@
-# Dual Camera Streaming & Recording with Flask and OpenCV
+# Camera Streaming & Recording with Flask and OpenCV
 
-This project captures video from **two USB cameras** (e.g., front and rear),  
-records them to disk, and serves live video streams via a **Flask MJPEG server**.  
+USBカメラ1台から映像を取得し、録画しながらFlaskを使ってリアルタイム配信するシステムです。
 
-It is designed for use cases such as dashcams, surveillance, or any dual-camera recording system.
+Raspberry PiなどのLinux環境でのドライブレコーダーや監視カメラシステムを想定しています。
 
----
+# 主な機能 / Features
 
-## ✨ Features
+- USBカメラ1台から映像を取得
+  - Camera: `/dev/video2`
+- 映像をMP4形式で録画
+- 映像に日時（タイムスタンプ）を表示
+- 録画ファイルを15秒ごとに自動分割
+- FlaskによるMJPEGリアルタイムストリーミング
+- ブラウザからライブ映像を確認可能
 
-- Capture from two cameras (`/dev/video2` and `/dev/video4` by default)  
-- Record video as `.mp4` files, organized by date and camera type (`front` / `rear`)  
-- Timestamp overlay on each frame  
-- Auto-segmentation of recordings every **15 seconds**  
-- Live MJPEG streaming via Flask web server  
-- Separate endpoints for front and rear camera feeds  
-
----
-
-## 📦 Requirements
+# 動作環境 / Requirements
 
 - Python 3.8+
-- OpenCV (cv2)
+- Linux / Raspberry Pi OS
+- USBカメラ 1台
+- OpenCV
 - Flask
 
-Install dependencies:
+# インストール / Installation
+
+## 1. リポジトリを取得
+
+```bash
+git clone https://github.com/yourusername/dual-camera-stream.git
+cd dual-camera-stream
+```
+
+※ `yourusername` は実際のGitHubユーザー名に変更してください。
+
+## 2. 必要なライブラリをインストール
 
 ```bash
 pip install flask opencv-python
 ```
 
-# Dual Camera Streaming & Recording with Flask + OpenCV
+# カメラの確認 / Camera Setup
 
-このプロジェクトは、複数のUSBカメラ（例: 前方・後方）から映像を取得し、  
-Flaskを用いてMJPEGストリーミング配信を行いながら録画を保存するシステムです。
-
----
-
-## 📌 機能
-
-- 前方カメラ（例: `/dev/video2`）、後方カメラ（例: `/dev/video4`）から映像を取得  
-- OpenCVを使用して録画（mp4形式、日時入り）  
-- Flaskを利用したリアルタイムMJPEGストリーミング配信  
-- 保存先は `recorded/front/` および `recorded/rear/` フォルダに日付ごとに自動作成  
-- 録画ファイルは 15 秒ごとに自動分割  
-
----
-
-## 🚀 セットアップ
-
-### 1. 必要環境
-
-- Python 3.8+
-- USBカメラ 2台
-- Flask
-- OpenCV (cv2)
-
-### 2. インストール
+USBカメラが認識されているか確認します。
 
 ```bash
-git clone https://github.com/yourusername/dual-camera-stream.git
-cd dual-camera-stream
-
-# 必要ライブラリをインストール
-pip install -r requirements.txt
+ls /dev/video*
 ```
+
+初期設定では以下のデバイスを使用します。
+
+| カメラ | デバイス |
+|---|---|
+| Camera | `/dev/video2` |
+
+カメラのデバイス番号は環境によって異なります。使用するカメラに合わせて、Pythonプログラム内のデバイス番号を変更してください。
+
+# 保存フォルダ / Recording Directory
+
+録画ファイルは以下の構成で保存されます。
+
+```text
+recorded/
+└── front/
+    ├── 20261101_120000.mp4
+    ├── 20261101_120015.mp4
+    └── ...
+```
+
+- `front/`：カメラの録画ファイル
+- 録画ファイルは15秒ごとに分割されます。
+- ファイル名には録画開始日時が付与されます。
+
+# 起動方法 / Usage
+
+Pythonプログラムを実行します。
+
+```bash
+python3 camera_server.py
+```
+
+Flaskサーバーが起動したら、ブラウザから以下のURLにアクセスします。
+
+**ライブ映像：**
+
+```text
+http://<RaspberryPi-IP>:5000/front
+```
+
+`<RaspberryPi-IP>` はRaspberry PiのIPアドレスに置き換えてください。
+
+例：
+
+```text
+http://192.168.1.100:5000/front
+```
+
+# 注意事項 / Notes
+
+- カメラのデバイス番号は接続環境によって変わる場合があります。
+- 録画を長時間続ける場合は、ストレージの空き容量を定期的に確認してください。
+- カメラの解像度やフレームレートによってCPU負荷が変わります。
+- ブラウザからアクセスする場合、Raspberry Piとアクセス端末が同じネットワークに接続されている必要があります。
+
+# License
+
+This project is available under the MIT License.
